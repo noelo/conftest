@@ -55,6 +55,7 @@ func NewDefaultCommand() *cobra.Command {
 	cmd.AddCommand(NewPullCommand(ctx))
 	cmd.AddCommand(NewVerifyCommand(ctx))
 	cmd.AddCommand(NewPluginCommand(ctx))
+	cmd.AddCommand(NewHTTPCommand(ctx))
 
 	pluginCmds, err := loadPlugins(ctx)
 	if err != nil {
