@@ -4,19 +4,21 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
 
 	"github.com/instrumenta/conftest/parser"
 	"github.com/instrumenta/conftest/policy"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 // NewHTTPCommand creates http server
 func NewHTTPCommand(ctx context.Context) *cobra.Command {
+	log.SetFormatter(&log.JSONFormatter{})
 	var portNum int
 	cmd := cobra.Command{
 		Use:   "http-server <port>",
@@ -29,12 +31,9 @@ func NewHTTPCommand(ctx context.Context) *cobra.Command {
 			h1 := func(w http.ResponseWriter, _ *http.Request) {
 				io.WriteString(w, "Hello from a HandleFunc #1!\n")
 			}
-			h2 := func(w http.ResponseWriter, _ *http.Request) {
-				io.WriteString(w, "Hello from a HandleFunc #2!\n")
-			}
 
 			http.HandleFunc("/", h1)
-			http.HandleFunc("/endpoint", h2)
+			http.HandleFunc("/validate", handleHTTPPostRequest)
 			var sPort = strconv.Itoa(portNum)
 
 			log.Fatal(http.ListenAndServe(":"+sPort, nil))
@@ -46,14 +45,44 @@ func NewHTTPCommand(ctx context.Context) *cobra.Command {
 	return &cmd
 }
 
-func doWork(ctx context.Context) error {
+func handleHTTPPostRequest(w http.ResponseWriter, r *http.Request) {
+	log.Info("Handling PostRequest", r)
+	parseErr := r.ParseMultipartForm(32 << 20) // maxMemory 32MB
+	if parseErr != nil {
+		log.Error("Failed to parse multipart message")
+		http.Error(w, "failed to parse multipart message", http.StatusBadRequest)
+		return
+	}
+
+	numFiles := len(r.MultipartForm.File)
+	valFiles := make([]string, numFiles)
+	fileCount := 0
+	for key, value := range r.MultipartForm.File {
+		f, _, _ := r.FormFile(key)
+		metadata, _ := ioutil.ReadAll(f)
+		log.WithFields(log.Fields{
+			"k":    key,
+			"v":    value,
+			"size": len(metadata),
+		}).Info("File read ")
+		valFiles[fileCount] = string(metadata)
+		fileCount++
+	}
+
+	doWork(nil, valFiles)
+
+	io.WriteString(w, "Hello from a handleHTTPPostRequest #1!\n")
+}
+
+func doWork(ctx context.Context, files []string) error {
 	out := GetOutputManager(outputJSON, false)
 	input := viper.GetString("input")
+	// files := []string{"null1", "null2"}
 
-	files, err := parseFileList(fileList)
-	if err != nil {
-		return fmt.Errorf("parse files: %w", err)
-	}
+	// files, err := parseFileList(fileList)
+	// if err != nil {
+	// 	return fmt.Errorf("parse files: %w", err)
+	// }
 
 	configurations, err := parser.GetConfigurations(ctx, input, files)
 	if err != nil {
