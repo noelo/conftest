@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"os"
+
 	"strconv"
 
 	"github.com/instrumenta/conftest/parser"
@@ -54,29 +55,25 @@ func handleHTTPPostRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	numFiles := len(r.MultipartForm.File)
-	valFiles := make([]string, numFiles)
-	fileCount := 0
+	fileData := make(map[string]multipart.File)
 	for key, value := range r.MultipartForm.File {
-		f, _, _ := r.FormFile(key)
-		metadata, _ := ioutil.ReadAll(f)
+		fl, _, _ := r.FormFile(key)
+		// fileContents, _ := ioutil.ReadAll(f)
 		log.WithFields(log.Fields{
-			"k":    key,
-			"v":    value,
-			"size": len(metadata),
+			"k": key,
+			"v": value,
 		}).Info("File read ")
-		valFiles[fileCount] = string(metadata)
-		fileCount++
+		fileData[value[0].Filename] = fl
 	}
 
-	doWork(nil, valFiles)
+	doWork(nil, fileData)
 
 	io.WriteString(w, "Hello from a handleHTTPPostRequest #1!\n")
 }
 
-func doWork(ctx context.Context, files []string) error {
+func doWork(ctx context.Context, filesContent map[string]multipart.File) error {
 	out := GetOutputManager(outputJSON, false)
-	input := viper.GetString("input")
+	// input := viper.GetString("input")
 	// files := []string{"null1", "null2"}
 
 	// files, err := parseFileList(fileList)
@@ -84,7 +81,7 @@ func doWork(ctx context.Context, files []string) error {
 	// 	return fmt.Errorf("parse files: %w", err)
 	// }
 
-	configurations, err := parser.GetConfigurations(ctx, input, files)
+	configurations, err := GetConfigurationsHTTP(ctx, filesContent)
 	if err != nil {
 		return fmt.Errorf("get configurations: %w", err)
 	}
@@ -140,4 +137,31 @@ func doWork(ctx context.Context, files []string) error {
 
 	return nil
 
+}
+
+// GetConfigurations parses and returns the configurations given in the file list
+func GetConfigurationsHTTP(ctx context.Context, filesContent map[string]multipart.File) (map[string]interface{}, error) {
+	var fileConfigs []parser.ConfigDoc
+	for fileName, fileMP := range filesContent {
+		fileType := parser.GetFileType(fileName, "")
+		fileparser, err := parser.GetParser(fileType)
+		if err != nil {
+			return nil, fmt.Errorf("get parser: %w", err)
+		}
+
+		configDoc := parser.ConfigDoc{
+			ReadCloser: fileMP,
+			Filepath:   fileName,
+			Parser:     fileparser,
+		}
+
+		fileConfigs = append(fileConfigs, configDoc)
+	}
+
+	unmarshaledConfigs, err := parser.BulkUnmarshal(fileConfigs)
+	if err != nil {
+		return nil, fmt.Errorf("bulk unmarshal: %w", err)
+	}
+
+	return unmarshaledConfigs, nil
 }

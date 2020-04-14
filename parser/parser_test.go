@@ -164,7 +164,7 @@ nice: true`)),
 			for _, test := range testTable {
 				t.Run(test.name, func(t *testing.T) {
 					var unmarshalledConfigs map[string]interface{}
-					unmarshalledConfigs, err := bulkUnmarshal(test.controlReaders)
+					unmarshalledConfigs, err := BulkUnmarshal(test.controlReaders)
 					if err != nil {
 						t.Errorf("errors unmarshalling: %v", err)
 					}

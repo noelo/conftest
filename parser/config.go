@@ -23,12 +23,12 @@ func GetConfigurations(ctx context.Context, input string, fileList []string) (ma
 	for _, fileName := range fileList {
 		var config io.ReadCloser
 
-		config, err := getConfig(fileName)
+		config, err := GetConfig(fileName)
 		if err != nil {
 			return nil, fmt.Errorf("get config: %w", err)
 		}
 
-		fileType := getFileType(fileName, input)
+		fileType := GetFileType(fileName, input)
 		parser, err := GetParser(fileType)
 		if err != nil {
 			return nil, fmt.Errorf("get parser: %w", err)
@@ -43,7 +43,7 @@ func GetConfigurations(ctx context.Context, input string, fileList []string) (ma
 		fileConfigs = append(fileConfigs, configDoc)
 	}
 
-	unmarshaledConfigs, err := bulkUnmarshal(fileConfigs)
+	unmarshaledConfigs, err := BulkUnmarshal(fileConfigs)
 	if err != nil {
 		return nil, fmt.Errorf("bulk unmarshal: %w", err)
 	}
@@ -51,7 +51,7 @@ func GetConfigurations(ctx context.Context, input string, fileList []string) (ma
 	return unmarshaledConfigs, nil
 }
 
-func bulkUnmarshal(configList []ConfigDoc) (map[string]interface{}, error) {
+func BulkUnmarshal(configList []ConfigDoc) (map[string]interface{}, error) {
 	configContents := make(map[string]interface{})
 	for _, config := range configList {
 		contents, err := ioutil.ReadAll(config.ReadCloser)
@@ -71,7 +71,7 @@ func bulkUnmarshal(configList []ConfigDoc) (map[string]interface{}, error) {
 	return configContents, nil
 }
 
-func getConfig(fileName string) (io.ReadCloser, error) {
+func GetConfig(fileName string) (io.ReadCloser, error) {
 	if fileName == "-" {
 		config := ioutil.NopCloser(bufio.NewReader(os.Stdin))
 		return config, nil
@@ -90,7 +90,7 @@ func getConfig(fileName string) (io.ReadCloser, error) {
 	return config, nil
 }
 
-func getFileType(fileName string, input string) string {
+func GetFileType(fileName string, input string) string {
 	if input != "" {
 		return input
 	}

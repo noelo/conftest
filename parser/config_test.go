@@ -54,7 +54,7 @@ func TestGetFileType(t *testing.T) {
 
 	for _, testUnit := range testTable {
 		t.Run(testUnit.name, func(t *testing.T) {
-			fileType := getFileType(testUnit.fileName, testUnit.inputFileType)
+			fileType := GetFileType(testUnit.fileName, testUnit.inputFileType)
 			if fileType != testUnit.expectedFileType {
 				t.Fatalf("got wrong filetype got:%s want:%s", fileType, testUnit.expectedFileType)
 			}
