@@ -27,18 +27,10 @@ func NewHTTPCommand(ctx context.Context) *cobra.Command {
 		Long:  "Provide a http endpoint which receives and tests your configuration files using Open Policy Agent",
 
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Printf("%v\n", portNum)
-
-			h1 := func(w http.ResponseWriter, _ *http.Request) {
-				io.WriteString(w, "Hello from a HandleFunc #1!\n")
-			}
-
-			http.HandleFunc("/", h1)
 			http.HandleFunc("/validate", handleHTTPPostRequest)
 			var sPort = strconv.Itoa(portNum)
 
 			log.Fatal(http.ListenAndServe(":"+sPort, nil))
-
 			return nil
 		},
 	}
@@ -47,6 +39,13 @@ func NewHTTPCommand(ctx context.Context) *cobra.Command {
 }
 
 func handleHTTPPostRequest(w http.ResponseWriter, r *http.Request) {
+	var (
+		ctx    context.Context
+		cancel context.CancelFunc
+	)
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+
 	log.Info("Handling PostRequest", r)
 	parseErr := r.ParseMultipartForm(32 << 20) // maxMemory 32MB
 	if parseErr != nil {
@@ -58,28 +57,16 @@ func handleHTTPPostRequest(w http.ResponseWriter, r *http.Request) {
 	fileData := make(map[string]multipart.File)
 	for key, value := range r.MultipartForm.File {
 		fl, _, _ := r.FormFile(key)
-		// fileContents, _ := ioutil.ReadAll(f)
-		log.WithFields(log.Fields{
-			"k": key,
-			"v": value,
-		}).Info("File read ")
 		fileData[value[0].Filename] = fl
 	}
 
-	doWork(nil, fileData)
+	doWork(ctx, fileData)
 
 	io.WriteString(w, "Hello from a handleHTTPPostRequest #1!\n")
 }
 
 func doWork(ctx context.Context, filesContent map[string]multipart.File) error {
 	out := GetOutputManager(outputJSON, false)
-	// input := viper.GetString("input")
-	// files := []string{"null1", "null2"}
-
-	// files, err := parseFileList(fileList)
-	// if err != nil {
-	// 	return fmt.Errorf("parse files: %w", err)
-	// }
 
 	configurations, err := GetConfigurationsHTTP(ctx, filesContent)
 	if err != nil {
