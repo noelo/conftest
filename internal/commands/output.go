@@ -127,33 +127,33 @@ func (s *StandardOutputManager) Flush() error {
 
 	totalPolicies := totalFailures + totalWarnings + totalSuccesses
 
-    var outputColor aurora.Color
-    if totalFailures > 0 {
-        outputColor = aurora.RedFg
-    } else if totalWarnings > 0 {
-        outputColor = aurora.YellowFg
-    } else {
-        outputColor = aurora.GreenFg
-    }
+	var outputColor aurora.Color
+	if totalFailures > 0 {
+		outputColor = aurora.RedFg
+	} else if totalWarnings > 0 {
+		outputColor = aurora.YellowFg
+	} else {
+		outputColor = aurora.GreenFg
+	}
 
-    var pluralSuffixTests string
-    if totalPolicies != 1 {
-        pluralSuffixTests = "s"
-    }
+	var pluralSuffixTests string
+	if totalPolicies != 1 {
+		pluralSuffixTests = "s"
+	}
 
-    var pluralSuffixWarnings string
-    if totalWarnings != 1 {
-        pluralSuffixWarnings = "s"
-    }
+	var pluralSuffixWarnings string
+	if totalWarnings != 1 {
+		pluralSuffixWarnings = "s"
+	}
 
-    var pluralSuffixFailures string
-    if totalFailures != 1 {
-        pluralSuffixFailures = "s"
-    }
+	var pluralSuffixFailures string
+	if totalFailures != 1 {
+		pluralSuffixFailures = "s"
+	}
 
-    s.logger.Println()
-    outputText := fmt.Sprintf("%v test%s, %v passed, %v warning%s, %v failure%s", totalPolicies, pluralSuffixTests, totalSuccesses, totalWarnings, pluralSuffixWarnings, totalFailures, pluralSuffixFailures)
-    s.logger.Println(s.color.Colorize(outputText, outputColor))
+	s.logger.Println()
+	outputText := fmt.Sprintf("%v test%s, %v passed, %v warning%s, %v failure%s", totalPolicies, pluralSuffixTests, totalSuccesses, totalWarnings, pluralSuffixWarnings, totalFailures, pluralSuffixFailures)
+	s.logger.Println(s.color.Colorize(outputText, outputColor))
 
 	return nil
 }
@@ -255,6 +255,22 @@ func (j *JSONOutputManager) Flush() error {
 
 	j.logger.Print(out.String())
 	return nil
+}
+
+// Flush writes the contents of the managers buffer to a string
+func (j *JSONOutputManager) FlushToString() (string, error) {
+	b, err := json.Marshal(j.data)
+	if err != nil {
+		return "", err
+	}
+
+	var out bytes.Buffer
+	err = json.Indent(&out, b, "", "\t")
+	if err != nil {
+		return "", err
+	}
+
+	return out.String(), nil
 }
 
 // TAPOutputManager formats its output in TAP format

@@ -3,10 +3,8 @@ package commands
 import (
 	"context"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"net/http"
-	"os"
 
 	"strconv"
 
@@ -29,7 +27,7 @@ func NewHTTPCommand(ctx context.Context) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			http.HandleFunc("/validate", handleHTTPPostRequest)
 			var sPort = strconv.Itoa(portNum)
-
+			fmt.Println("Starting HTTP Server on port", sPort)
 			log.Fatal(http.ListenAndServe(":"+sPort, nil))
 			return nil
 		},
@@ -46,7 +44,7 @@ func handleHTTPPostRequest(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 
-	log.Info("Handling PostRequest", r)
+	log.Debug("Handling PostRequest", r)
 	parseErr := r.ParseMultipartForm(32 << 20) // maxMemory 32MB
 	if parseErr != nil {
 		log.Error("Failed to parse multipart message")
@@ -60,35 +58,38 @@ func handleHTTPPostRequest(w http.ResponseWriter, r *http.Request) {
 		fileData[value[0].Filename] = fl
 	}
 
-	doWork(ctx, fileData)
+	resStr, err := doWork(ctx, fileData)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 
-	io.WriteString(w, "Hello from a handleHTTPPostRequest #1!\n")
+	fmt.Fprintf(w, "%s", resStr)
 }
 
-func doWork(ctx context.Context, filesContent map[string]multipart.File) error {
-	out := GetOutputManager(outputJSON, false)
+func doWork(ctx context.Context, filesContent map[string]multipart.File) (string, error) {
+	out := NewJSONOutputManager(nil)
 
 	configurations, err := GetConfigurationsHTTP(ctx, filesContent)
 	if err != nil {
-		return fmt.Errorf("get configurations: %w", err)
+		return "", fmt.Errorf("get configurations: %w", err)
 	}
 
 	policyPath := viper.GetString("policy")
 
 	regoFiles, err := policy.ReadFiles(policyPath)
 	if err != nil {
-		return fmt.Errorf("read rego files: %w", err)
+		return "", fmt.Errorf("read rego files: %w", err)
 	}
 
 	compiler, err := policy.BuildCompiler(regoFiles)
 	if err != nil {
-		return fmt.Errorf("build compiler: %w", err)
+		return "", fmt.Errorf("build compiler: %w", err)
 	}
 
 	dataPaths := viper.GetStringSlice("data")
 	store, err := policy.StoreFromDataFiles(dataPaths)
 	if err != nil {
-		return fmt.Errorf("build store: %w", err)
+		return "", fmt.Errorf("build store: %w", err)
 	}
 
 	testRun := TestRun{
@@ -97,33 +98,30 @@ func doWork(ctx context.Context, filesContent map[string]multipart.File) error {
 	}
 
 	var namespaces []string
+
 	namespaces, err = policy.GetNamespaces(regoFiles, compiler)
-
-	var failureFound bool
-	result, err := testRun.GetResult(ctx, namespaces, configurations)
 	if err != nil {
-		return fmt.Errorf("get combined test result: %w", err)
+		return "", fmt.Errorf("get namespaces: %w", err)
 	}
 
-	if isResultFailure(result) {
-		failureFound = true
+	for fileName, config := range configurations {
+		result, err := testRun.GetResult(ctx, namespaces, config)
+		if err != nil {
+			return "", fmt.Errorf("get test result: %w", err)
+		}
+
+		result.FileName = fileName
+		if err := out.Put(result); err != nil {
+			return "", fmt.Errorf("writing error: %w", err)
+		}
 	}
 
-	result.FileName = "Combined"
-	if err := out.Put(result); err != nil {
-		return fmt.Errorf("writing combined error: %w", err)
+	var resultStr string
+	if resultStr, err = out.FlushToString(); err != nil {
+		return "", fmt.Errorf("flushing output: %w", err)
 	}
 
-	if err := out.Flush(); err != nil {
-		return fmt.Errorf("flushing output: %w", err)
-	}
-
-	if failureFound {
-		os.Exit(1)
-	}
-
-	return nil
-
+	return resultStr, nil
 }
 
 // GetConfigurations parses and returns the configurations given in the file list
